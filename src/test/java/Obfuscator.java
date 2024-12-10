@@ -80,9 +80,6 @@ public class Obfuscator {
         List<RegisterEntry> newRegisterEntries = new ArrayList<>();
 
         Map<Long, Double> accountBalances = new HashMap<>();
-        // List<RegisterEntry> copiedEntries = rawObjects.registerEntries().stream()
-        //     .map(r -> new RegisterEntry(r.id(), r.accountId(), r.entryName(), r.amount(), r.date()))
-        //     .collect(Collectors.toList());
 
         //shuffle amount
         // List<Double> originalAmounts = copiedEntries.stream()
@@ -103,6 +100,21 @@ public class Obfuscator {
         }
         Collection<RegisterEntry> obfuscatedRegisterEntries = newRegisterEntries;
 
+        // verify balance of each account
+        for (Account a : rawObjects.accounts()) {
+            long accountId = accountIdMap.get(a.getId());
+            // long accountId = a.getId();
+            double totalRegisterAmount = accountBalances.getOrDefault(accountId, 0.0);
+
+            // logger.info("Account {} balance: {}", accountId, totalRegisterAmount);
+
+            if (a instanceof SavingsAccount sa) {
+                sa.setBalance(totalRegisterAmount);
+            } else if (a instanceof CheckingAccount ca) {
+                ca.setBalance(totalRegisterAmount);
+            }
+        }
+        
         return new BankRecords(obfuscatedOwners, obfuscatedAccounts, obfuscatedRegisterEntries);
     }
 

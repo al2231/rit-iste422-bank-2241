@@ -93,6 +93,10 @@ public abstract class Account implements Persistable {
         return balance;
     }
 
+    public void setBalance(double balance) {
+        this.balance = balance;
+    }
+
     public void setMinimumBalance(double minimumBalance) {
         this.minimumBalance = minimumBalance;
     }
