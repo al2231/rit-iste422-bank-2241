@@ -9,14 +9,12 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 record BankRecords(Collection<Owner> owners, Collection<Account> accounts, Collection<RegisterEntry> registerEntries) { }
@@ -55,6 +53,7 @@ public class Obfuscator {
         //obfuscate accounts
         List<Account> newAccounts = new ArrayList<>();
 
+        Map<Long, Double> accountBalances = new HashMap<>();
         for (Account a : rawObjects.accounts()) {
             // number variance, offset ID
             long new_owner_id = ownerIdMap.get(a.getOwnerId());
@@ -67,8 +66,10 @@ public class Obfuscator {
             Account newAccount;
             if (a instanceof SavingsAccount sa) {
                 newAccount = new SavingsAccount(new_name, new_account_id, sa.getBalance(), 0, new_owner_id);
+                accountBalances.put(new_account_id, sa.getBalance());
             } else if (a instanceof CheckingAccount ca) {
                 newAccount = new CheckingAccount(new_name, new_account_id, ca.getBalance(), 0, new_owner_id);
+                accountBalances.put(new_account_id, ca.getBalance());
             } else {
                 throw new IllegalStateException("Unexpected account type");
             }
@@ -79,20 +80,33 @@ public class Obfuscator {
         //obfuscate registers
         List<RegisterEntry> newRegisterEntries = new ArrayList<>();
 
-        Map<Long, Double> accountBalances = new HashMap<>();
-
+        // Map<Long, Double> accountRegisterSums = new HashMap<>();
         //shuffle amount
         // List<Double> originalAmounts = copiedEntries.stream()
         //     .map(RegisterEntry::amount)
         //     .collect(Collectors.toList());
         // Collections.shuffle(originalAmounts);
         // int id = 0;
-        for (RegisterEntry r : rawObjects.registerEntries()) {
-            long new_account_id = accountIdMap.get(r.accountId());
+        
+        for (RegisterEntry r : excludeNonTransactions(rawObjects.registerEntries())) {
+        // for (RegisterEntry r : rawObjects.registerEntries()) {
 
+            long new_account_id = accountIdMap.get(r.accountId());
+            double accountBalance = accountBalances.get(new_account_id);
+
+            double totalRegisterAmount = rawObjects.registerEntries().stream()
+                .filter(entry -> accountIdMap.get(entry.accountId()) == new_account_id)
+                .mapToDouble(RegisterEntry::amount)
+                .sum();
+
+            double new_amount = (r.amount() / totalRegisterAmount) * accountBalance;
             // double new_amount = originalAmounts.get(id++);
-            double new_amount = r.amount() + random.nextDouble() * 10 - 5;
-            accountBalances.put(new_account_id, accountBalances.getOrDefault(new_account_id, 0.0) + new_amount);
+            // double new_amount = 0.0;
+            // if (r.amount() != 0.0) {
+                // new_amount = r.amount() + random.nextDouble() * 10 - 5;
+                // double new_amount = r.amount() + random.nextDouble() * 10 - 5;
+                // accountBalances.put(new_account_id, accountBalances.getOrDefault(new_account_id, 0.0) + new_amount);
+            // }
 
             Date new_date = dateVariance(r.date());
 
@@ -104,14 +118,16 @@ public class Obfuscator {
         for (Account a : rawObjects.accounts()) {
             long accountId = accountIdMap.get(a.getId());
             // long accountId = a.getId();
-            double totalRegisterAmount = accountBalances.getOrDefault(accountId, 0.0);
+            double totalRegisterAmount = accountBalances.getOrDefault(accountId, Double.NaN);
 
-            // logger.info("Account {} balance: {}", accountId, totalRegisterAmount);
+            Double balance = (totalRegisterAmount == 0.0) ? Double.NaN : totalRegisterAmount;
+
+            logger.info("Account {} balance: {}", accountId, totalRegisterAmount);
 
             if (a instanceof SavingsAccount sa) {
-                sa.setBalance(totalRegisterAmount);
+                sa.setBalance(balance);
             } else if (a instanceof CheckingAccount ca) {
-                ca.setBalance(totalRegisterAmount);
+                ca.setBalance(balance);
             }
         }
         
@@ -122,6 +138,20 @@ public class Obfuscator {
     private Date dateVariance(Date dateIn) {
         int dayVariance = random.nextInt(61)- 30; //range of +- 30 days
         return new Date(dateIn.getTime() + (dayVariance * 24L * 60 * 60 * 1000));
+    }
+
+    private static boolean findARegex(final String target, final String [] regexes) {
+        for (String regex : regexes) {
+            if (target.matches(regex)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    private Collection<RegisterEntry> excludeNonTransactions(Collection<RegisterEntry> entries) {
+        String [] excludes = {".*END CHECK.*"};
+
+        return entries.stream().filter(e -> findARegex(e.entryName(), excludes)).toList();
     }
 
     /**
