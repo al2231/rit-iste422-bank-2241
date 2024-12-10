@@ -9,6 +9,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -20,17 +22,58 @@ public class Obfuscator {
     private static Logger logger = LogManager.getLogger(Obfuscator.class.getName());
 
     public BankRecords obfuscate(BankRecords rawObjects) {
-        // TODO: Obfuscate and return the records! Fill these in with your own
+        // Obfuscate and return the records
         // Example: mask SSN
         List<Owner> newOwners = new ArrayList<>();
+
+        Map<String, String> nameMap = new HashMap<>();
+        int counter = 1;
         for (Owner o : rawObjects.owners()) {
             String new_ssn = "***-**-" + o.ssn().substring(7);
             // other changes...
-            newOwners.add(new Owner(o.name(), o.id(), o.dob(), new_ssn, o.address(), o.address2(), o.city(), o.state(), o.zip()));
+
+            // substitute Name
+            String new_name = "Person " + counter++;
+            nameMap.putIfAbsent(o.name(), new_name);
+
+            //TODO dob
+
+            newOwners.add(new Owner(new_name, o.id(), o.dob(), new_ssn, o.address(), o.address2(), o.city(), o.state(), o.zip()));
         }
         Collection<Owner> obfuscatedOwners = newOwners;
-        Collection<Account> obfuscatedAccounts = rawObjects.accounts();
-        Collection<RegisterEntry> obfuscatedRegisterEntries = rawObjects.registerEntries();
+
+        //obfuscate accounts
+        List<Account> newAccounts = new ArrayList<>();
+
+        for (Account a : rawObjects.accounts()) {
+            //TODO name and owner id
+            String newName = "";
+
+            long newOwnerId = 2;
+
+            Account newAccount;
+            if (a instanceof SavingsAccount sa) {
+                newAccount = new SavingsAccount(newName, sa.getId(), sa.getBalance(), 0, newOwnerId);
+            } else if (a instanceof CheckingAccount ca) {
+                newAccount = new CheckingAccount(newName, ca.getId(), ca.getBalance(), 0, newOwnerId);
+            } else {
+                newAccount = null;
+            }
+            newAccounts.add(newAccount);
+        }
+        Collection<Account> obfuscatedAccounts = newAccounts;
+
+        //obfuscate registers
+        List<RegisterEntry> newRegisterEntries = new ArrayList<>();
+
+        for (RegisterEntry r : rawObjects.registerEntries()) {
+            //TODO amount and transaction date
+            double newAmount = 10.0;
+            Date newDate = new Date();
+            newRegisterEntries.add(new RegisterEntry(r.id(), r.accountId(), r.entryName(), newAmount, newDate));
+
+        }
+        Collection<RegisterEntry> obfuscatedRegisterEntries = newRegisterEntries;
 
         return new BankRecords(obfuscatedOwners, obfuscatedAccounts, obfuscatedRegisterEntries);
     }

@@ -43,6 +43,11 @@ task obfuscator(type: JavaExec) {
         classpath = sourceSets.test.runtimeClasspath
 }
 
+task runObfuscatorUtils(type: JavaExec) { 
+    group="Execution";
+    classpath=sourceSets.test.runtimeClasspath; main="ObfuscatorUtils" 
+}
+
 repositories {
     mavenCentral()
 }
