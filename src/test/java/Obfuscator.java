@@ -8,18 +8,25 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Random;
 import java.util.stream.Collectors;
+
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
 
 record BankRecords(Collection<Owner> owners, Collection<Account> accounts, Collection<RegisterEntry> registerEntries) { }
 
 public class Obfuscator {
     private static Logger logger = LogManager.getLogger(Obfuscator.class.getName());
+    private Random random = new Random();
 
     public BankRecords obfuscate(BankRecords rawObjects) {
         // Obfuscate and return the records
@@ -36,9 +43,9 @@ public class Obfuscator {
             String new_name = "Person " + counter++;
             nameMap.putIfAbsent(o.name(), new_name);
 
-            //TODO dob
+            Date new_dob = dateVariance(o.dob());
 
-            newOwners.add(new Owner(new_name, o.id(), o.dob(), new_ssn, o.address(), o.address2(), o.city(), o.state(), o.zip()));
+            newOwners.add(new Owner(new_name, o.id(), new_dob, new_ssn, o.address(), o.address2(), o.city(), o.state(), o.zip()));
         }
         Collection<Owner> obfuscatedOwners = newOwners;
 
@@ -46,16 +53,17 @@ public class Obfuscator {
         List<Account> newAccounts = new ArrayList<>();
 
         for (Account a : rawObjects.accounts()) {
-            //TODO name and owner id
-            String newName = "";
+            // substitute Name
+            String new_name = "Account " + a.getId();
 
-            long newOwnerId = 2;
+            // number variance, offset ID
+            long new_owner_id = 1000 + a.getOwnerId();
 
             Account newAccount;
             if (a instanceof SavingsAccount sa) {
-                newAccount = new SavingsAccount(newName, sa.getId(), sa.getBalance(), 0, newOwnerId);
+                newAccount = new SavingsAccount(new_name, sa.getId(), sa.getBalance(), 0, new_owner_id);
             } else if (a instanceof CheckingAccount ca) {
-                newAccount = new CheckingAccount(newName, ca.getId(), ca.getBalance(), 0, newOwnerId);
+                newAccount = new CheckingAccount(new_name, ca.getId(), ca.getBalance(), 0, new_owner_id);
             } else {
                 newAccount = null;
             }
@@ -67,15 +75,22 @@ public class Obfuscator {
         List<RegisterEntry> newRegisterEntries = new ArrayList<>();
 
         for (RegisterEntry r : rawObjects.registerEntries()) {
-            //TODO amount and transaction date
-            double newAmount = 10.0;
-            Date newDate = new Date();
-            newRegisterEntries.add(new RegisterEntry(r.id(), r.accountId(), r.entryName(), newAmount, newDate));
+            // amount number variance
+            double new_amount = r.amount() + random.nextDouble() * 10 - 5;
 
+            Date new_date = dateVariance(r.date());
+
+            newRegisterEntries.add(new RegisterEntry(r.id(), r.accountId(), r.entryName(), new_amount, new_date));
         }
         Collection<RegisterEntry> obfuscatedRegisterEntries = newRegisterEntries;
 
         return new BankRecords(obfuscatedOwners, obfuscatedAccounts, obfuscatedRegisterEntries);
+    }
+
+    // helper method for date variance technique
+    private Date dateVariance(Date dateIn) {
+        int dayVariance = random.nextInt(61)- 30; //range of +- 30 days
+        return new Date(dateIn.getTime() + (dayVariance * 24L * 60 * 60 * 1000));
     }
 
     /**
