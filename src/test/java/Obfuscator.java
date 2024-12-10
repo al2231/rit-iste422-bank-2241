@@ -8,19 +8,16 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
-
-import javax.crypto.Cipher;
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
 
 record BankRecords(Collection<Owner> owners, Collection<Account> accounts, Collection<RegisterEntry> registerEntries) { }
 
@@ -30,12 +27,18 @@ public class Obfuscator {
 
     public BankRecords obfuscate(BankRecords rawObjects) {
         // Obfuscate and return the records
+        Map<Long, Long> ownerIdMap = new HashMap<>();
+        Map<Long, Long> accountIdMap = new HashMap<>();
+        Map<String, String> nameMap = new HashMap<>();
+
         // Example: mask SSN
         List<Owner> newOwners = new ArrayList<>();
 
-        Map<String, String> nameMap = new HashMap<>();
         int counter = 1;
         for (Owner o : rawObjects.owners()) {
+            long new_owner_id = 1000 + o.id(); //offset owner id to match accounts
+            ownerIdMap.put(o.id(), new_owner_id);
+
             String new_ssn = "***-**-" + o.ssn().substring(7);
             // other changes...
 
@@ -45,7 +48,7 @@ public class Obfuscator {
 
             Date new_dob = dateVariance(o.dob());
 
-            newOwners.add(new Owner(new_name, o.id(), new_dob, new_ssn, o.address(), o.address2(), o.city(), o.state(), o.zip()));
+            newOwners.add(new Owner(new_name, new_owner_id, new_dob, new_ssn, o.address(), o.address2(), o.city(), o.state(), o.zip()));
         }
         Collection<Owner> obfuscatedOwners = newOwners;
 
@@ -53,19 +56,21 @@ public class Obfuscator {
         List<Account> newAccounts = new ArrayList<>();
 
         for (Account a : rawObjects.accounts()) {
-            // substitute Name
-            String new_name = "Account " + a.getId();
-
             // number variance, offset ID
-            long new_owner_id = 1000 + a.getOwnerId();
+            long new_owner_id = ownerIdMap.get(a.getOwnerId());
+            long new_account_id = 2000 + a.getId(); 
+            accountIdMap.put(a.getId(), new_account_id);
+
+            // substitute Name
+            String new_name = "Account " + new_account_id;
 
             Account newAccount;
             if (a instanceof SavingsAccount sa) {
-                newAccount = new SavingsAccount(new_name, sa.getId(), sa.getBalance(), 0, new_owner_id);
+                newAccount = new SavingsAccount(new_name, new_account_id, sa.getBalance(), 0, new_owner_id);
             } else if (a instanceof CheckingAccount ca) {
-                newAccount = new CheckingAccount(new_name, ca.getId(), ca.getBalance(), 0, new_owner_id);
+                newAccount = new CheckingAccount(new_name, new_account_id, ca.getBalance(), 0, new_owner_id);
             } else {
-                newAccount = null;
+                throw new IllegalStateException("Unexpected account type");
             }
             newAccounts.add(newAccount);
         }
@@ -74,13 +79,27 @@ public class Obfuscator {
         //obfuscate registers
         List<RegisterEntry> newRegisterEntries = new ArrayList<>();
 
+        Map<Long, Double> accountBalances = new HashMap<>();
+        // List<RegisterEntry> copiedEntries = rawObjects.registerEntries().stream()
+        //     .map(r -> new RegisterEntry(r.id(), r.accountId(), r.entryName(), r.amount(), r.date()))
+        //     .collect(Collectors.toList());
+
+        //shuffle amount
+        // List<Double> originalAmounts = copiedEntries.stream()
+        //     .map(RegisterEntry::amount)
+        //     .collect(Collectors.toList());
+        // Collections.shuffle(originalAmounts);
+        // int id = 0;
         for (RegisterEntry r : rawObjects.registerEntries()) {
-            // amount number variance
+            long new_account_id = accountIdMap.get(r.accountId());
+
+            // double new_amount = originalAmounts.get(id++);
             double new_amount = r.amount() + random.nextDouble() * 10 - 5;
+            accountBalances.put(new_account_id, accountBalances.getOrDefault(new_account_id, 0.0) + new_amount);
 
             Date new_date = dateVariance(r.date());
 
-            newRegisterEntries.add(new RegisterEntry(r.id(), r.accountId(), r.entryName(), new_amount, new_date));
+            newRegisterEntries.add(new RegisterEntry(r.id(), new_account_id, r.entryName(), new_amount, new_date));
         }
         Collection<RegisterEntry> obfuscatedRegisterEntries = newRegisterEntries;
 
